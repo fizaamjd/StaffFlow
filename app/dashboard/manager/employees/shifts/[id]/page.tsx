@@ -1,48 +1,18 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Typography, Card, CardHeader, CardContent, Tabs, Tab, Button, Avatar, Badge, Table, TableBody, TableCell, TableHead, TableRow, TextField, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Alert, styled } from '@mui/material';
 import { CalendarMonth, AccessTime, Edit, Add, Save, Delete, EventAvailable } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { api } from '@/lib/api';
 
-// Mock employee data
-const employeeData = {
-  id: 1,
-  name: 'Jane Smith',
-  email: 'jane.smith@staffflow.com',
-  department: 'Sales',
-  position: 'Sales Representative',
-  status: 'active',
-  avatar: '/placeholder.svg?height=40&width=40',
-  initials: 'JS',
-  hireDate: '2023-01-15',
-  phone: '+1 (555) 123-4567',
-  address: '123 Main St, Anytown, USA',
-  emergencyContact: 'John Smith, +1 (555) 987-6543',
+const DAY_FULL: Record<string, string> = {
+  Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday',
 };
-
-// Mock shifts data
-const shiftsData = [
-  { id: 1, date: '2025-04-20', day: 'Monday', startTime: '09:00', endTime: '17:00', status: 'confirmed' },
-  { id: 2, date: '2025-04-21', day: 'Tuesday', startTime: '09:00', endTime: '17:00', status: 'confirmed' },
-  { id: 3, date: '2025-04-23', day: 'Thursday', startTime: '10:00', endTime: '18:00', status: 'confirmed' },
-  { id: 4, date: '2025-04-24', day: 'Friday', startTime: '09:00', endTime: '17:00', status: 'confirmed' },
-  { id: 5, date: '2025-04-27', day: 'Monday', startTime: '09:00', endTime: '17:00', status: 'pending' },
-];
-
-// Mock availability data
-const availabilityData = [
-  { day: 'Monday', available: true, startTime: '08:00', endTime: '18:00' },
-  { day: 'Tuesday', available: true, startTime: '08:00', endTime: '18:00' },
-  { day: 'Wednesday', available: true, startTime: '08:00', endTime: '18:00' },
-  { day: 'Thursday', available: true, startTime: '08:00', endTime: '18:00' },
-  { day: 'Friday', available: true, startTime: '08:00', endTime: '18:00' },
-  { day: 'Saturday', available: false, startTime: '', endTime: '' },
-  { day: 'Sunday', available: false, startTime: '', endTime: '' },
-];
+const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const PageContainer = styled(Box)(({ theme }) => ({
   width: '100%',
@@ -98,59 +68,91 @@ const StyledBadge = styled(Badge)(({ theme }) => ({
   },
 }));
 
-const EmployeeShiftsPage: React.FC<{ params: { id: string } }> = ({ params }) => {
-  const [shifts, setShifts] = useState(shiftsData);
+const EmployeeShiftsPage: React.FC<{ params: Promise<{ id: string }> }> = ({ params }) => {
+  const { id } = React.use(params);
+  const [employeeData, setEmployeeData] = useState<any>(null);
+  const [shifts, setShifts] = useState<any[]>([]);
   const [date, setDate] = useState<Date | null>(null);
   const [isAddingShift, setIsAddingShift] = useState(false);
-  const [isEditingShift, setIsEditingShift] = useState<number | null>(null);
+  const [isEditingShift, setIsEditingShift] = useState<string | null>(null);
   const [newShift, setNewShift] = useState({ date: '', startTime: '09:00', endTime: '17:00' });
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const handleDeleteShift = (id: number) => {
-    setShifts(shifts.filter((shift) => shift.id !== id));
-    setAlert({ type: 'success', message: 'The shift has been deleted successfully.' });
+  const notify = (type: 'success' | 'error', message: string) => {
+    setAlert({ type, message });
     setTimeout(() => setAlert(null), 3000);
   };
 
-  const handleAddShift = () => {
+  const loadShifts = useCallback(async () => {
+    try {
+      const res: any = await api.listShifts({ employee: id, limit: 100 });
+      setShifts(res.shifts || []);
+    } catch {
+      setShifts([]);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res: any = await api.getEmployee(id);
+        setEmployeeData(res.employee);
+      } catch {
+        /* ignore */
+      }
+      loadShifts();
+    })();
+  }, [id, loadShifts]);
+
+  const availability = WEEK.map((d) => {
+    const a = (employeeData?.availability || []).find((x: any) => x.day === d);
+    return { day: DAY_FULL[d], available: !!a, startTime: a?.start || '', endTime: a?.end || '' };
+  });
+
+  const handleDeleteShift = async (shiftId: string) => {
+    try {
+      await api.deleteShift(shiftId);
+      setShifts(shifts.filter((shift) => shift._id !== shiftId));
+      notify('success', 'The shift has been deleted successfully.');
+    } catch (e: any) {
+      notify('error', e?.message || 'Failed to delete shift');
+    }
+  };
+
+  const handleAddShift = async () => {
     if (!date) {
-      setAlert({ type: 'error', message: 'Please select a date for the shift.' });
-      setTimeout(() => setAlert(null), 3000);
+      notify('error', 'Please select a date for the shift.');
       return;
     }
-
     const formattedDate = format(date, 'yyyy-MM-dd');
     const dayName = format(date, 'EEEE');
-
-    const newShiftItem = {
-      id: shifts.length + 1,
-      date: formattedDate,
-      day: dayName,
-      startTime: newShift.startTime,
-      endTime: newShift.endTime,
-      status: 'pending' as const,
-    };
-
-    setShifts([...shifts, newShiftItem]);
-    setIsAddingShift(false);
-    setDate(null);
-    setNewShift({ date: '', startTime: '09:00', endTime: '17:00' });
-    setAlert({ type: 'success', message: `New shift added for ${dayName}, ${formattedDate}.` });
-    setTimeout(() => setAlert(null), 3000);
+    try {
+      await api.createShift({
+        employee: id,
+        department: employeeData?.department || 'Sales',
+        date: formattedDate,
+        startTime: newShift.startTime,
+        endTime: newShift.endTime,
+      });
+      setIsAddingShift(false);
+      setDate(null);
+      setNewShift({ date: '', startTime: '09:00', endTime: '17:00' });
+      notify('success', `New shift added for ${dayName}, ${formattedDate}.`);
+      loadShifts();
+    } catch (e: any) {
+      notify('error', e?.message || 'Failed to add shift');
+    }
   };
 
-  const handleEditShift = (id: number) => {
-    const updatedShifts = shifts.map((shift) => {
-      if (shift.id === id) {
-        return { ...shift, startTime: newShift.startTime, endTime: newShift.endTime };
-      }
-      return shift;
-    });
-
-    setShifts(updatedShifts);
-    setIsEditingShift(null);
-    setAlert({ type: 'success', message: 'The shift has been updated successfully.' });
-    setTimeout(() => setAlert(null), 3000);
+  const handleEditShift = async (shiftId: string) => {
+    try {
+      await api.updateShift(shiftId, { startTime: newShift.startTime, endTime: newShift.endTime });
+      setIsEditingShift(null);
+      notify('success', 'The shift has been updated successfully.');
+      loadShifts();
+    } catch (e: any) {
+      notify('error', e?.message || 'Failed to update shift');
+    }
   };
 
   return (
@@ -167,13 +169,13 @@ const EmployeeShiftsPage: React.FC<{ params: { id: string } }> = ({ params }) =>
             Employee Shifts
           </Typography>
           <Typography variant="body2" sx={{ color: '#64748b' }}>
-            Manage shifts for {employeeData.name}
+            Manage shifts for {employeeData?.name}
           </Typography>
         </Box>
         <Dialog open={isAddingShift} onClose={() => setIsAddingShift(false)}>
           <DialogTitle>Add New Shift</DialogTitle>
           <DialogContent>
-            <DialogContentText>Create a new shift for {employeeData.name}.</DialogContentText>
+            <DialogContentText>Create a new shift for {employeeData?.name}.</DialogContentText>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
               <Box>
                 <Typography variant="body2" sx={{ mb: 1, fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif', color: '#1a1a1a' }}>
@@ -273,32 +275,32 @@ const EmployeeShiftsPage: React.FC<{ params: { id: string } }> = ({ params }) =>
         <CardContent>
           <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: 'flex-start', gap: 3 }}>
             <Avatar sx={{ width: 80, height: 80 }}>
-              <img src={employeeData.avatar || '/placeholder.svg'} alt={employeeData.name} />
+              <img src={employeeData?.avatar || '/placeholder.svg'} alt={employeeData?.name} />
             </Avatar>
             <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, flex: 1 }}>
               <Box>
                 <Typography variant="body2" sx={{ color: '#64748b', fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>Name</Typography>
-                <Typography variant="body1" sx={{ fontWeight: 'medium' }}>{employeeData.name}</Typography>
+                <Typography variant="body1" sx={{ fontWeight: 'medium' }}>{employeeData?.name}</Typography>
               </Box>
               <Box>
                 <Typography variant="body2" sx={{ color: '#64748b', fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>Email</Typography>
-                <Typography variant="body1">{employeeData.email}</Typography>
+                <Typography variant="body1">{employeeData?.email}</Typography>
               </Box>
               <Box>
                 <Typography variant="body2" sx={{ color: '#64748b', fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>Department</Typography>
-                <Typography variant="body1">{employeeData.department}</Typography>
+                <Typography variant="body1">{employeeData?.department}</Typography>
               </Box>
               <Box>
                 <Typography variant="body2" sx={{ color: '#64748b', fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>Position</Typography>
-                <Typography variant="body1">{employeeData.position}</Typography>
+                <Typography variant="body1">{employeeData?.position}</Typography>
               </Box>
               <Box>
                 <Typography variant="body2" sx={{ color: '#64748b', fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>Status</Typography>
-                <StyledBadge badgeContent={employeeData.status === 'active' ? 'Active' : 'Inactive'} color={employeeData.status === 'active' ? 'success' : 'default'} />
+                <StyledBadge badgeContent={employeeData?.status === 'active' ? 'Active' : 'Inactive'} color={employeeData?.status === 'active' ? 'success' : 'default'} />
               </Box>
               <Box>
-                <Typography variant="body2" sx={{ color: '#64748b', fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>Hire Date</Typography>
-                <Typography variant="body1">{employeeData.hireDate}</Typography>
+                <Typography variant="body2" sx={{ color: '#64748b', fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>Joined</Typography>
+                <Typography variant="body1">{employeeData?.createdAt ? new Date(employeeData.createdAt).toLocaleDateString() : '—'}</Typography>
               </Box>
             </Box>
           </Box>
@@ -316,7 +318,7 @@ const EmployeeShiftsPage: React.FC<{ params: { id: string } }> = ({ params }) =>
           <StyledCard>
             <CardHeader
               title={<Typography variant="h6" sx={{ fontFamily: '"Poppins", "Inter", "Arial", sans-serif', fontWeight: 600, color: '#0d1b2a' }}>Upcoming Shifts</Typography>}
-              subheader={<Typography variant="body2" sx={{ color: '#64748b' }}>Manage upcoming shifts for {employeeData.name}</Typography>}
+              subheader={<Typography variant="body2" sx={{ color: '#64748b' }}>Manage upcoming shifts for {employeeData?.name}</Typography>}
             />
             <CardContent>
               <Table sx={{ border: '1px solid #e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
@@ -332,7 +334,7 @@ const EmployeeShiftsPage: React.FC<{ params: { id: string } }> = ({ params }) =>
                 </TableHead>
                 <TableBody>
                   {shifts.map((shift) => (
-                    <TableRow key={shift.id} sx={{ '&:hover': { backgroundColor: '#f9f9f9' } }}>
+                    <TableRow key={shift._id} sx={{ '&:hover': { backgroundColor: '#f9f9f9' } }}>
                       <TableCell sx={{ fontWeight: 'medium' }}>{shift.day}</TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -341,7 +343,7 @@ const EmployeeShiftsPage: React.FC<{ params: { id: string } }> = ({ params }) =>
                         </Box>
                       </TableCell>
                       <TableCell>
-                        {isEditingShift === shift.id ? (
+                        {isEditingShift === shift._id ? (
                           <Select
                             value={newShift.startTime}
                             onChange={(e) => setNewShift({ ...newShift, startTime: e.target.value })}
@@ -361,7 +363,7 @@ const EmployeeShiftsPage: React.FC<{ params: { id: string } }> = ({ params }) =>
                         )}
                       </TableCell>
                       <TableCell>
-                        {isEditingShift === shift.id ? (
+                        {isEditingShift === shift._id ? (
                           <Select
                             value={newShift.endTime}
                             onChange={(e) => setNewShift({ ...newShift, endTime: e.target.value })}
@@ -384,22 +386,22 @@ const EmployeeShiftsPage: React.FC<{ params: { id: string } }> = ({ params }) =>
                         />
                       </TableCell>
                       <TableCell sx={{ textAlign: 'right' }}>
-                        {isEditingShift === shift.id ? (
-                          <StyledButton variant="text" onClick={() => handleEditShift(shift.id)}>
+                        {isEditingShift === shift._id ? (
+                          <StyledButton variant="text" onClick={() => handleEditShift(shift._id)}>
                             <Save sx={{ fontSize: 16 }} />
                           </StyledButton>
                         ) : (
                           <StyledButton
                             variant="text"
                             onClick={() => {
-                              setIsEditingShift(shift.id);
+                              setIsEditingShift(shift._id);
                               setNewShift({ date: shift.date, startTime: shift.startTime, endTime: shift.endTime });
                             }}
                           >
                             <Edit sx={{ fontSize: 16 }} />
                           </StyledButton>
                         )}
-                        <StyledButton variant="text" onClick={() => handleDeleteShift(shift.id)}>
+                        <StyledButton variant="text" onClick={() => handleDeleteShift(shift._id)}>
                           <Delete sx={{ fontSize: 16 }} />
                         </StyledButton>
                       </TableCell>
@@ -415,7 +417,7 @@ const EmployeeShiftsPage: React.FC<{ params: { id: string } }> = ({ params }) =>
           <StyledCard>
             <CardHeader
               title={<Typography variant="h6" sx={{ fontFamily: '"Poppins", "Inter", "Arial", sans-serif', fontWeight: 600, color: '#0d1b2a' }}>Employee Availability</Typography>}
-              subheader={<Typography variant="body2" sx={{ color: '#64748b' }}>Weekly availability for {employeeData.name}</Typography>}
+              subheader={<Typography variant="body2" sx={{ color: '#64748b' }}>Weekly availability for {employeeData?.name}</Typography>}
             />
             <CardContent>
               <Table sx={{ border: '1px solid #e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
@@ -428,7 +430,7 @@ const EmployeeShiftsPage: React.FC<{ params: { id: string } }> = ({ params }) =>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {availabilityData.map((day) => (
+                  {availability.map((day) => (
                     <TableRow key={day.day} sx={{ '&:hover': { backgroundColor: '#f9f9f9' } }}>
                       <TableCell sx={{ fontWeight: 'medium' }}>{day.day}</TableCell>
                       <TableCell>
@@ -451,7 +453,7 @@ const EmployeeShiftsPage: React.FC<{ params: { id: string } }> = ({ params }) =>
           <StyledCard>
             <CardHeader
               title={<Typography variant="h6" sx={{ fontFamily: '"Poppins", "Inter", "Arial", sans-serif', fontWeight: 600, color: '#0d1b2a' }}>Shift History</Typography>}
-              subheader={<Typography variant="body2" sx={{ color: '#64748b' }}>Past shifts worked by {employeeData.name}</Typography>}
+              subheader={<Typography variant="body2" sx={{ color: '#64748b' }}>Past shifts worked by {employeeData?.name}</Typography>}
             />
             <CardContent sx={{ textAlign: 'center', py: 8 }}>
               <Typography variant="body2" sx={{ color: '#64748b' }}>

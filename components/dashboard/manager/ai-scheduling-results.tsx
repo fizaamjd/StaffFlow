@@ -1,76 +1,9 @@
 'use client';
 
-import React from 'react';
-import { Box, Typography, Button, Avatar, Chip, Divider, styled } from '@mui/material';
-import { Edit, Download, Check, Delete, CalendarToday } from '@mui/icons-material';
-
-const scheduledShifts = [
-  {
-    id: 1,
-    employee: {
-      name: 'Jane Smith',
-      avatar: '/placeholder.svg?height=40&width=40',
-      initials: 'JS',
-    },
-    department: 'Sales',
-    date: '2025-04-20',
-    day: 'Monday',
-    startTime: '09:00',
-    endTime: '17:00',
-  },
-  {
-    id: 2,
-    employee: {
-      name: 'Mike Johnson',
-      avatar: '/placeholder.svg?height=40&width=40',
-      initials: 'MJ',
-    },
-    department: 'Support',
-    date: '2025-04-20',
-    day: 'Monday',
-    startTime: '10:00',
-    endTime: '18:00',
-  },
-  {
-    id: 3,
-    employee: {
-      name: 'Sarah Williams',
-      avatar: '/placeholder.svg?height=40&width=40',
-      initials: 'SW',
-    },
-    department: 'Kitchen',
-    date: '2025-04-21',
-    day: 'Tuesday',
-    startTime: '08:00',
-    endTime: '16:00',
-  },
-  {
-    id: 4,
-    employee: {
-      name: 'David Brown',
-      avatar: '/placeholder.svg?height=40&width=40',
-      initials: 'DB',
-    },
-    department: 'Delivery',
-    date: '2025-04-21',
-    day: 'Tuesday',
-    startTime: '12:00',
-    endTime: '20:00',
-  },
-  {
-    id: 5,
-    employee: {
-      name: 'Lisa Chen',
-      avatar: '/placeholder.svg?height=40&width=40',
-      initials: 'LC',
-    },
-    department: 'Admin',
-    date: '2025-04-22',
-    day: 'Wednesday',
-    startTime: '09:00',
-    endTime: '17:00',
-  },
-];
+import React, { useState } from 'react';
+import { Box, Typography, Button, Avatar, Chip, Tooltip, CircularProgress, Alert, styled } from '@mui/material';
+import { Check, Delete, CalendarToday } from '@mui/icons-material';
+import { api } from '@/lib/api';
 
 const Container = styled(Box)(({ theme }) => ({
   display: 'flex',
@@ -80,14 +13,14 @@ const Container = styled(Box)(({ theme }) => ({
 }));
 
 const TableContainer = styled(Box)(({ theme }) => ({
-  border: '1px solid #e2e8f0', // Border from global.css
+  border: '1px solid #e2e8f0',
   borderRadius: '0.375rem',
   overflow: 'hidden',
 }));
 
 const TableHeader = styled(Box)(({ theme }) => ({
   padding: theme.spacing(2),
-  backgroundColor: '#f8fafc', // Light background
+  backgroundColor: '#f8fafc',
 }));
 
 const TableRow = styled(Box)(({ theme }) => ({
@@ -95,129 +28,149 @@ const TableRow = styled(Box)(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   borderBottom: '1px solid #e2e8f0',
-  '&:last-child': {
-    borderBottom: 'none',
-  },
+  '&:last-child': { borderBottom: 'none' },
 }));
 
 const StyledButton = styled(Button)(({ theme }) => ({
-  fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif',
+  fontFamily: '"Inter", sans-serif',
   textTransform: 'none',
-  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)', // From global.css
-  transition: 'box-shadow 0.2s ease-in-out, background-color 0.2s ease-in-out',
-  backgroundColor: '#03306b', // Primary color
+  backgroundColor: '#03306b',
   color: 'white',
-  '&:hover': {
-    boxShadow: '0 3px 6px rgba(0, 0, 0, 0.1)', // From global.css
-    backgroundColor: '#022a5b', // Darker primary
-  },
+  '&:hover': { backgroundColor: '#022a5b' },
   display: 'flex',
   alignItems: 'center',
   gap: theme.spacing(1),
 }));
 
-const StyledOutlineButton = styled(Button)(({ theme }) => ({
-  fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif',
-  textTransform: 'none',
-  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)', // From global.css
-  transition: 'box-shadow 0.2s ease-in-out, color 0.2s ease-in-out',
-  borderColor: '#e2e8f0',
-  color: '#1a1a1a',
-  '&:hover': {
-    boxShadow: '0 3px 6px rgba(0, 0, 0, 0.1)', // From global.css
-    color: '#c61111', // Secondary color
-    borderColor: '#c61111',
-  },
-}));
-
-const StyledIconButton = styled(Button)(({ theme }) => ({
-  minWidth: 'auto',
-  padding: theme.spacing(1),
-  color: '#1a1a1a',
-  '&:hover': {
-    color: '#c61111', // Secondary color
-  },
-}));
-
-const StyledChip = styled(Chip)(({ theme }) => ({
-  backgroundColor: '#03306b', // Primary color
+const StyledChip = styled(Chip)(() => ({
+  backgroundColor: '#03306b',
   color: 'white',
-  fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif',
+  fontFamily: '"Inter", sans-serif',
 }));
 
-export function AISchedulingResults() {
+const initials = (name: string) =>
+  (name || '')
+    .split(' ')
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+const scoreColor = (s: number) => (s >= 80 ? '#16a34a' : s >= 60 ? '#ca8a04' : '#dc2626');
+
+export function AISchedulingResults({ data, onPublished }: { data?: any; onPublished?: () => void }) {
+  const [publishing, setPublishing] = useState(false);
+  const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [shifts, setShifts] = useState<any[]>(data?.shifts || []);
+
+  // keep local copy in sync when a new generation arrives
+  React.useEffect(() => {
+    setShifts(data?.shifts || []);
+  }, [data]);
+
+  if (!data || !data.shifts || data.shifts.length === 0) {
+    return (
+      <Typography sx={{ color: '#64748b', fontFamily: '"Inter", sans-serif', py: 2 }}>
+        Configure the options above and click <strong>Generate AI Schedule</strong> to preview an optimized schedule here.
+      </Typography>
+    );
+  }
+
+  const removeRow = (tempId: number) => setShifts((prev) => prev.filter((s) => s.tempId !== tempId));
+
+  const handlePublish = async () => {
+    setPublishing(true);
+    setAlert(null);
+    try {
+      const payload = shifts.map((s) => ({
+        employee: s.employee.id,
+        department: s.department,
+        date: s.date,
+        startTime: s.startTime,
+        endTime: s.endTime,
+      }));
+      const res: any = await api.publishSchedule(payload);
+      setAlert({ type: 'success', message: `Published ${res.count} shifts and notified employees.` });
+      onPublished?.();
+    } catch (e: any) {
+      setAlert({ type: 'error', message: e?.message || 'Failed to publish schedule' });
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   return (
     <Container>
+      {alert && <Alert severity={alert.type}>{alert.message}</Alert>}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
         <Box sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
           <StyledChip label="AI Generated" sx={{ mb: 1 }} />
-          <Typography variant="h6" sx={{ fontFamily: '"Poppins", "Inter", "Arial", sans-serif', color: '#0d1b2a' }}>
-            Schedule for Apr 20 - Apr 26, 2025
+          <Typography variant="h6" sx={{ fontFamily: '"Poppins", sans-serif', color: '#0d1b2a' }}>
+            {data.params?.startDate} → {data.params?.endDate}
           </Typography>
-          <Typography variant="body2" sx={{ color: '#64748b', fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>
-            Generated on Apr 19, 2025 • All Departments
+          <Typography variant="body2" sx={{ color: '#64748b', fontFamily: '"Inter", sans-serif' }}>
+            {data.stats?.filled} shifts • {data.stats?.coverage}% coverage • avg match {data.stats?.avgMatchScore} •{' '}
+            {data.stats?.employeesUsed} staff
+            {data.stats?.unfilled ? ` • ${data.stats.unfilled} unfilled` : ''}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', sm: 'flex-end' } }}>
-          <StyledOutlineButton variant="outlined" size="small">
-            <Edit sx={{ fontSize: 16 }} />
-            Edit
-          </StyledOutlineButton>
-          <StyledOutlineButton variant="outlined" size="small">
-            <Download sx={{ fontSize: 16 }} />
-            Export
-          </StyledOutlineButton>
-          <StyledButton size="small">
-            <Check sx={{ fontSize: 16 }} />
-            Approve & Publish
+          <StyledButton size="small" onClick={handlePublish} disabled={publishing || shifts.length === 0}>
+            {publishing ? <CircularProgress size={16} sx={{ color: 'white' }} /> : <Check sx={{ fontSize: 16 }} />}
+            Approve &amp; Publish
           </StyledButton>
         </Box>
       </Box>
 
       <TableContainer>
         <TableHeader>
-          <Box sx={{ display: 'flex', gap: 4, fontWeight: 500, fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif', color: '#1a1a1a' }}>
+          <Box sx={{ display: 'flex', gap: 2, fontWeight: 500, fontFamily: '"Inter", sans-serif', color: '#1a1a1a' }}>
             <Box sx={{ flex: 1.5 }}>Employee</Box>
             <Box sx={{ flex: 1 }}>Department</Box>
             <Box sx={{ flex: 1 }}>Day</Box>
             <Box sx={{ flex: 1 }}>Date</Box>
             <Box sx={{ flex: 1 }}>Time</Box>
-            <Box sx={{ flex: 1, textAlign: 'right' }}>Actions</Box>
+            <Box sx={{ flex: 1 }}>Match</Box>
+            <Box sx={{ flex: 0.6, textAlign: 'right' }}>Actions</Box>
           </Box>
         </TableHeader>
-        {scheduledShifts.map((shift) => (
-          <TableRow key={shift.id}>
+        {shifts.map((shift) => (
+          <TableRow key={shift.tempId}>
             <Box sx={{ flex: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Avatar sx={{ width: 32, height: 32 }}>
-                <img src={shift.employee.avatar || '/placeholder.svg'} alt={shift.employee.name} />
-                <Typography sx={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>{shift.employee.initials}</Typography>
+              <Avatar sx={{ width: 32, height: 32, bgcolor: '#03306b', color: 'white', fontSize: '0.75rem' }}>
+                {shift.employee.initials || initials(shift.employee.name)}
               </Avatar>
-              <Typography sx={{ fontWeight: 500, fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>
-                {shift.employee.name}
-              </Typography>
+              <Typography sx={{ fontWeight: 500, fontFamily: '"Inter", sans-serif' }}>{shift.employee.name}</Typography>
             </Box>
             <Box sx={{ flex: 1 }}>
-              <Typography sx={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>{shift.department}</Typography>
+              <Typography sx={{ fontFamily: '"Inter", sans-serif' }}>{shift.department}</Typography>
             </Box>
             <Box sx={{ flex: 1 }}>
-              <Typography sx={{ fontWeight: 500, fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>{shift.day}</Typography>
+              <Typography sx={{ fontWeight: 500, fontFamily: '"Inter", sans-serif' }}>{shift.day}</Typography>
             </Box>
             <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
               <CalendarToday sx={{ fontSize: 16, color: '#64748b' }} />
-              <Typography sx={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>{shift.date}</Typography>
+              <Typography sx={{ fontFamily: '"Inter", sans-serif' }}>{shift.date}</Typography>
             </Box>
             <Box sx={{ flex: 1 }}>
-              <Typography sx={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>
+              <Typography sx={{ fontFamily: '"Inter", sans-serif' }}>
                 {shift.startTime} - {shift.endTime}
               </Typography>
             </Box>
-            <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-              <StyledIconButton variant="text">
-                <Edit sx={{ fontSize: 16 }} />
-              </StyledIconButton>
-              <StyledIconButton variant="text">
+            <Box sx={{ flex: 1 }}>
+              <Tooltip title={(shift.reasons || []).join(' • ')} arrow>
+                <Chip
+                  size="small"
+                  label={`${shift.matchScore}`}
+                  sx={{ backgroundColor: scoreColor(shift.matchScore), color: 'white', fontWeight: 600 }}
+                />
+              </Tooltip>
+            </Box>
+            <Box sx={{ flex: 0.6, display: 'flex', justifyContent: 'flex-end' }}>
+              <Button sx={{ minWidth: 'auto', p: 1, color: '#c61111' }} onClick={() => removeRow(shift.tempId)}>
                 <Delete sx={{ fontSize: 16 }} />
-              </StyledIconButton>
+              </Button>
             </Box>
           </TableRow>
         ))}

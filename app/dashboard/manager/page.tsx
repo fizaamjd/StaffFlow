@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import {
   Box,
   Button,
@@ -14,9 +14,36 @@ import {
 import { Calendar, Clock, DollarSign, Users } from "lucide-react"
 import { ManagerDashboardChart } from "@/components/dashboard/manager/dashboard-chart"
 import { UpcomingShifts } from "@/components/dashboard/manager/upcoming-shifts"
+import { api } from "@/lib/api"
+import { useRequireAuth } from "@/lib/auth"
 
 export default function ManagerDashboardPage() {
   const [activeTab, setActiveTab] = useState("overview")
+  useRequireAuth("manager")
+
+  const [stats, setStats] = useState({ totalEmployees: 0, scheduledShifts: 0, totalHours: 0, payroll: 0 })
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const [dash, pay]: any = await Promise.all([api.managerDashboard(), api.payroll()])
+        if (!active) return
+        const scheduledShifts = (dash.shiftsByDept || []).reduce((s: number, d: any) => s + d.count, 0)
+        setStats({
+          totalEmployees: dash.stats?.totalEmployees ?? 0,
+          scheduledShifts,
+          totalHours: dash.stats?.weeklyHours ?? 0,
+          payroll: Math.round(pay.totals?.amount ?? 0),
+        })
+      } catch (e) {
+        // leave zeros on failure
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: "24px", width: "100%", padding: "16px", backgroundColor: "#fff" }}>
@@ -66,7 +93,7 @@ export default function ManagerDashboardPage() {
               mb: "4px",
             }}
           >
-            12
+            {stats.totalEmployees}
           </Typography>
           <Typography
             sx={{
@@ -75,7 +102,7 @@ export default function ManagerDashboardPage() {
               color: "#64748b",
             }}
           >
-            +2 from last month
+            Active staff
           </Typography>
         </Box>
 
@@ -116,7 +143,7 @@ export default function ManagerDashboardPage() {
               mb: "4px",
             }}
           >
-            42
+            {stats.scheduledShifts}
           </Typography>
           <Typography
             sx={{
@@ -166,7 +193,7 @@ export default function ManagerDashboardPage() {
               mb: "4px",
             }}
           >
-            320
+            {stats.totalHours}
           </Typography>
           <Typography
             sx={{
@@ -175,7 +202,7 @@ export default function ManagerDashboardPage() {
               color: "#64748b",
             }}
           >
-            This month
+            Last 7 days
           </Typography>
         </Box>
 
@@ -216,7 +243,7 @@ export default function ManagerDashboardPage() {
               mb: "4px",
             }}
           >
-            $12,480
+            ${stats.payroll.toLocaleString()}
           </Typography>
           <Typography
             sx={{

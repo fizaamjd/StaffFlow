@@ -1,17 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { Box, styled, Typography } from '@mui/material';
-
-const data = [
-  { name: 'Sales', hours: 120 },
-  { name: 'Support', hours: 80 },
-  { name: 'Kitchen', hours: 70 },
-  { name: 'Admin', hours: 40 },
-  { name: 'Delivery', hours: 60 },
-  { name: 'Cleaning', hours: 30 },
-];
+import { api } from '@/lib/api';
 
 const ChartContainer = styled(Box)(({ theme }) => ({
   width: '100%',
@@ -48,6 +40,19 @@ const TooltipValue = styled(Typography)(({ theme }) => ({
 }));
 
 export function ManagerDashboardChart() {
+  const [data, setData] = useState<{ name: string; hours: number }[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res: any = await api.payroll();
+        setData((res.departments || []).map((d: any) => ({ name: d.department, hours: Math.round(d.hours) })));
+      } catch {
+        setData([]);
+      }
+    })();
+  }, []);
+
   const renderCustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (

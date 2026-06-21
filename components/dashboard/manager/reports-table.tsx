@@ -3,8 +3,9 @@
 import React from 'react';
 import { Box, Button, Typography, styled } from '@mui/material';
 import { Download, Visibility } from '@mui/icons-material';
+import { api } from '@/lib/api';
 
-const reportData = [
+const _legacyReportData = [
   {
     id: 1,
     department: 'Sales',
@@ -116,6 +117,28 @@ const StyledGhostButton = styled(Button)(({ theme }) => ({
 }));
 
 export function ManagerReportsTable() {
+  const [reportData, setReportData] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res: any = await api.payroll();
+        setReportData(
+          (res.departments || []).map((d: any, i: number) => ({
+            id: i,
+            department: d.department,
+            totalHours: Math.round(d.hours),
+            employees: d.employeeCount,
+            avgHoursPerEmployee: d.employeeCount ? d.hours / d.employeeCount : 0,
+            overtime: Math.round(d.overtimeHours),
+          }))
+        );
+      } catch {
+        setReportData([]);
+      }
+    })();
+  }, []);
+
   return (
     <Container>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>

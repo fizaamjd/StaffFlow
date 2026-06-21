@@ -3,58 +3,39 @@
 import React from 'react';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { Box, styled } from '@mui/material';
+import { api } from '@/lib/api';
 
-const data = [
-  {
-    name: 'Week 1',
-    sales: 120,
-    support: 80,
-    kitchen: 70,
-    delivery: 60,
-    admin: 40,
-    cleaning: 30,
-  },
-  {
-    name: 'Week 2',
-    sales: 110,
-    support: 85,
-    kitchen: 75,
-    delivery: 65,
-    admin: 45,
-    cleaning: 35,
-  },
-  {
-    name: 'Week 3',
-    sales: 130,
-    support: 90,
-    kitchen: 80,
-    delivery: 70,
-    admin: 50,
-    cleaning: 40,
-  },
-  {
-    name: 'Week 4',
-    sales: 125,
-    support: 95,
-    kitchen: 85,
-    delivery: 75,
-    admin: 55,
-    cleaning: 45,
-  },
-];
-
-const ChartContainer = styled(Box)(({ theme }) => ({
+const ChartContainer = styled(Box)(() => ({
   width: '100%',
   height: '100%',
   backgroundColor: 'white',
   borderRadius: '0.375rem',
-  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)', // From global.css
+  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
   '&:hover': {
-    boxShadow: '0 3px 6px rgba(0, 0, 0, 0.1)', // From global.css
+    boxShadow: '0 3px 6px rgba(0, 0, 0, 0.1)',
   },
 }));
 
 export function ManagerReportsChart() {
+  const [data, setData] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res: any = await api.reports();
+        setData(
+          (res.hoursByMonth || []).map((m: any) => ({
+            name: m.month,
+            hours: Math.round(m.hours),
+            overtime: Math.round(m.overtime || 0),
+          }))
+        );
+      } catch {
+        setData([]);
+      }
+    })();
+  }, []);
+
   return (
     <ChartContainer>
       <ResponsiveContainer width="100%" height="100%">
@@ -62,7 +43,7 @@ export function ManagerReportsChart() {
           <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
           <XAxis
             dataKey="name"
-            stroke="#64748b" // Muted color from global.css
+            stroke="#64748b"
             fontSize={12}
             tickLine={false}
             axisLine={false}
@@ -86,12 +67,8 @@ export function ManagerReportsChart() {
             labelStyle={{ color: '#03306b', fontWeight: 600 }}
           />
           <Legend />
-          <Bar dataKey="sales" name="Sales" fill="#03306b" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="support" name="Support" fill="#1e40af" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="kitchen" name="Kitchen" fill="#c61111" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="delivery" name="Delivery" fill="#dc2626" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="admin" name="Admin" fill="#1e3a8a" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="cleaning" name="Cleaning" fill="#991b1b" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="hours" name="Total Hours" fill="#03306b" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="overtime" name="Overtime" fill="#c61111" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </ChartContainer>

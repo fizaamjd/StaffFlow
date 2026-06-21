@@ -1,41 +1,33 @@
 
 "use client"
 
+import { useState, useEffect } from "react"
 import { Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Button } from "@mui/material"
 import { FileDownload } from "@mui/icons-material"
-
-const reportData = [
-  {
-    id: 1,
-    week: "Week 1 (Apr 1-7)",
-    regularHours: 40,
-    overtimeHours: 0,
-    totalHours: 40,
-  },
-  {
-    id: 2,
-    week: "Week 2 (Apr 8-14)",
-    regularHours: 40,
-    overtimeHours: 2,
-    totalHours: 42,
-  },
-  {
-    id: 3,
-    week: "Week 3 (Apr 15-21)",
-    regularHours: 38,
-    overtimeHours: 0,
-    totalHours: 38,
-  },
-  {
-    id: 4,
-    week: "Week 4 (Apr 22-28)",
-    regularHours: 40,
-    overtimeHours: 0,
-    totalHours: 40,
-  },
-]
+import { api } from "@/lib/api"
 
 export function EmployeeReportsTable() {
+  const [reportData, setReportData] = useState<any[]>([])
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res: any = await api.reports()
+        setReportData(
+          (res.hoursByMonth || []).map((m: any, i: number) => ({
+            id: i,
+            week: m.month,
+            regularHours: Math.round(m.hours - (m.overtime || 0)),
+            overtimeHours: Math.round(m.overtime || 0),
+            totalHours: Math.round(m.hours),
+          }))
+        )
+      } catch {
+        setReportData([])
+      }
+    })()
+  }, [])
+
   return (
     <Box sx={{ width: "100%", display: "flex", flexDirection: "column", gap: 2 }}>
       <Box sx={{ display: "flex", justifyContent: "flex-end" }}>

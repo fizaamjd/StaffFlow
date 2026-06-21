@@ -1,76 +1,33 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Box, Typography, Avatar, Chip, Button, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent,
-  DialogActions, TextField, Select, MenuItem as SelectMenuItem, styled, Alert
+  DialogActions, TextField, Select, MenuItem as SelectMenuItem, styled, Alert, CircularProgress
 } from '@mui/material';
 import { Edit, Delete, MoreHoriz, ManageAccounts } from '@mui/icons-material';
+import { api } from '@/lib/api';
 
 type Employee = {
-  id: number;
+  _id: string;
   name: string;
   email: string;
   department: string;
   position: string;
   status: 'active' | 'inactive';
-  avatar: string;
-  initials: string;
+  avatar?: string;
+  initials?: string;
 };
 
-const initialEmployees: Employee[] = [
-  {
-    id: 1,
-    name: 'Jane Smith',
-    email: 'jane.smith@staffflow.com',
-    department: 'Sales',
-    position: 'Sales Representative',
-    status: 'active',
-    avatar: '/placeholder.svg?height=40&width=40',
-    initials: 'JS',
-  },
-  {
-    id: 2,
-    name: 'Mike Johnson',
-    email: 'mike.johnson@staffflow.com',
-    department: 'Support',
-    position: 'Customer Support',
-    status: 'active',
-    avatar: '/placeholder.svg?height=40&width=40',
-    initials: 'MJ',
-  },
-  {
-    id: 3,
-    name: 'Sarah Williams',
-    email: 'sarah.williams@staffflow.com',
-    department: 'Kitchen',
-    position: 'Chef',
-    status: 'active',
-    avatar: '/placeholder.svg?height=40&width=40',
-    initials: 'SW',
-  },
-  {
-    id: 4,
-    name: 'David Brown',
-    email: 'david.brown@staffflow.com',
-    department: 'Delivery',
-    position: 'Delivery Driver',
-    status: 'active',
-    avatar: '/placeholder.svg?height=40&width=40',
-    initials: 'DB',
-  },
-  {
-    id: 5,
-    name: 'Lisa Chen',
-    email: 'lisa.chen@staffflow.com',
-    department: 'Admin',
-    position: 'Office Manager',
-    status: 'inactive',
-    avatar: '/placeholder.svg?height=40&width=40',
-    initials: 'LC',
-  },
-];
+const initialsOf = (name: string) =>
+  (name || '')
+    .split(' ')
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
 const TableContainer = styled(Box)(({ theme }) => ({
   border: '1px solid #e2e8f0',
@@ -172,16 +129,46 @@ const StyledChip = styled(Chip)(({ theme }) => ({
 
 export function EmployeeList({ filterStatus }: { filterStatus?: 'active' | 'inactive' }) {
   const router = useRouter();
-  const [employees, setEmployees] = useState<Employee[]>(initialEmployees);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [currentEmployee, setCurrentEmployee] = useState<Employee | null>(null);
+  const [saving, setSaving] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 
-  const filteredEmployees = filterStatus ? employees.filter((employee) => employee.status === filterStatus) : employees;
+  const showAlert = (type: 'success' | 'error', message: string) => {
+    setAlert({ type, message });
+    setTimeout(() => setAlert(null), 3000);
+  };
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res: any = await api.listEmployees({ role: 'employee', status: filterStatus, limit: 200 });
+      setEmployees(res.employees || []);
+    } catch (e: any) {
+      showAlert('error', e?.message || 'Failed to load employees');
+    } finally {
+      setLoading(false);
+    }
+  }, [filterStatus]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Refresh when a new employee is added elsewhere on the page.
+  useEffect(() => {
+    const handler = () => load();
+    window.addEventListener('staffflow:employees-changed', handler);
+    return () => window.removeEventListener('staffflow:employees-changed', handler);
+  }, [load]);
+
+  const filteredEmployees = employees;
 
   const handleEditEmployee = (employee: Employee) => {
     setCurrentEmployee({ ...employee });
@@ -189,35 +176,42 @@ export function EmployeeList({ filterStatus }: { filterStatus?: 'active' | 'inac
     setAnchorEl(null);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!currentEmployee) return;
-
-    const updatedEmployees = employees.map((emp) => (emp.id === currentEmployee.id ? currentEmployee : emp));
-    setEmployees(updatedEmployees);
-    setIsEditDialogOpen(false);
-    setAlert({
-      type: 'success',
-      message: `${currentEmployee.name}'s information has been updated.`,
-    });
-    setTimeout(() => setAlert(null), 3000);
+    setSaving(true);
+    try {
+      await api.updateEmployee(currentEmployee._id, {
+        name: currentEmployee.name,
+        email: currentEmployee.email,
+        department: currentEmployee.department,
+        position: currentEmployee.position,
+        status: currentEmployee.status,
+      });
+      setIsEditDialogOpen(false);
+      showAlert('success', `${currentEmployee.name}'s information has been updated.`);
+      load();
+    } catch (e: any) {
+      showAlert('error', e?.message || 'Failed to update employee');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleManageShifts = (id: number) => {
+  const handleManageShifts = (id: string) => {
     router.push(`/dashboard/manager/employees/shifts/${id}`);
     setAnchorEl(null);
   };
 
-  const confirmDeleteEmployee = () => {
+  const confirmDeleteEmployee = async () => {
     if (!employeeToDelete) return;
-
-    const updatedEmployees = employees.filter((emp) => emp.id !== employeeToDelete.id);
-    setEmployees(updatedEmployees);
-    setIsDeleteDialogOpen(false);
-    setAlert({
-      type: 'error',
-      message: `${employeeToDelete.name} has been removed from the system.`,
-    });
-    setTimeout(() => setAlert(null), 3000);
+    try {
+      await api.deleteEmployee(employeeToDelete._id);
+      setIsDeleteDialogOpen(false);
+      showAlert('error', `${employeeToDelete.name} has been deactivated.`);
+      load();
+    } catch (e: any) {
+      showAlert('error', e?.message || 'Failed to deactivate employee');
+    }
   };
 
   const handleDeleteEmployee = (employee: Employee) => {
@@ -226,7 +220,7 @@ export function EmployeeList({ filterStatus }: { filterStatus?: 'active' | 'inac
     setAnchorEl(null);
   };
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, employeeId: number) => {
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, employeeId: string) => {
     setAnchorEl(event.currentTarget);
     setSelectedEmployeeId(employeeId);
   };
@@ -255,14 +249,25 @@ export function EmployeeList({ filterStatus }: { filterStatus?: 'active' | 'inac
             <Box sx={{ flex: 1, textAlign: 'right' }}>Actions</Box>
           </Box>
         </TableHeader>
+        {!loading && filteredEmployees.length === 0 && (
+          <TableRow>
+            <Typography sx={{ color: '#64748b', fontFamily: '"Inter", sans-serif' }}>
+              No employees found. Use “Add Employee” to create one.
+            </Typography>
+          </TableRow>
+        )}
+        {loading && (
+          <TableRow>
+            <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', py: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          </TableRow>
+        )}
         {filteredEmployees.map((employee) => (
-          <TableRow key={employee.id}>
+          <TableRow key={employee._id}>
             <Box sx={{ flex: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Avatar sx={{ width: 32, height: 32, boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)' }}>
-                <img src={employee.avatar || '/placeholder.svg'} alt={employee.name} />
-                <Typography sx={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>
-                  {employee.initials}
-                </Typography>
+              <Avatar sx={{ width: 32, height: 32, bgcolor: '#03306b', color: 'white', fontSize: '0.75rem', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)' }}>
+                {employee.initials || initialsOf(employee.name)}
               </Avatar>
               <Typography sx={{ fontWeight: 500, fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>
                 {employee.name}
@@ -293,12 +298,12 @@ export function EmployeeList({ filterStatus }: { filterStatus?: 'active' | 'inac
               />
             </Box>
             <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-              <StyledIconButton onClick={(e) => handleMenuOpen(e, employee.id)}>
+              <StyledIconButton onClick={(e) => handleMenuOpen(e, employee._id)}>
                 <MoreHoriz sx={{ fontSize: 16 }} />
               </StyledIconButton>
               <Menu
                 anchorEl={anchorEl}
-                open={Boolean(anchorEl) && selectedEmployeeId === employee.id}
+                open={Boolean(anchorEl) && selectedEmployeeId === employee._id}
                 onClose={handleMenuClose}
                 PaperProps={{
                   sx: {
@@ -313,7 +318,7 @@ export function EmployeeList({ filterStatus }: { filterStatus?: 'active' | 'inac
                   <Edit sx={{ fontSize: 16, mr: 1 }} />
                   Edit
                 </MenuItem>
-                <MenuItem onClick={() => handleManageShifts(employee.id)}>
+                <MenuItem onClick={() => handleManageShifts(employee._id)}>
                   <ManageAccounts sx={{ fontSize: 16, mr: 1 }} />
                   Manage Shifts
                 </MenuItem>
@@ -405,7 +410,7 @@ export function EmployeeList({ filterStatus }: { filterStatus?: 'active' | 'inac
         </DialogContent>
         <DialogActions>
           <StyledOutlineButton onClick={() => setIsEditDialogOpen(false)}>Cancel</StyledOutlineButton>
-          <StyledButton onClick={handleSaveEdit}>Save changes</StyledButton>
+          <StyledButton onClick={handleSaveEdit} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</StyledButton>
         </DialogActions>
       </Dialog>
 

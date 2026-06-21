@@ -6,6 +6,9 @@ import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { Box, Typography, TextField, Button, Select, MenuItem, Alert, styled } from '@mui/material';
 import { HourglassEmpty } from '@mui/icons-material';
+import { api } from '@/lib/api';
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const formSchema = z.object({
   firstName: z.string().min(2, { message: 'First name must be at least 2 characters' }),
@@ -108,31 +111,34 @@ export function AddEmployeeForm({ onSuccess }: AddEmployeeFormProps) {
     setIsLoading(true);
 
     try {
-      // In a real app, you would send this data to your backend
-      console.log('Employee data:', values);
-
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      setAlert({
-        type: 'success',
-        message: `${values.firstName} ${values.lastName} has been added successfully.`,
+      const res: any = await api.createEmployee({
+        name: `${values.firstName} ${values.lastName}`.trim(),
+        email: values.email,
+        department: cap(values.department),
+        position: values.position,
+        phone: values.phone || '',
       });
 
-      form.reset();
+      const msg = res?.tempPassword
+        ? `${values.firstName} ${values.lastName} added. Temporary password: ${res.tempPassword} (share it securely).`
+        : `${values.firstName} ${values.lastName} has been added successfully.`;
+      setAlert({ type: 'success', message: msg });
 
-      // Call the onSuccess callback if provided
-      if (onSuccess) {
-        onSuccess();
+      form.reset();
+      // notify the employee list to refresh
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('staffflow:employees-changed'));
       }
-    } catch (error) {
+      if (onSuccess) onSuccess();
+    } catch (error: any) {
       setAlert({
         type: 'error',
-        message: 'There was an error adding the employee. Please try again.',
+        message: error?.message || 'There was an error adding the employee. Please try again.',
       });
     } finally {
       setIsLoading(false);
-      setTimeout(() => setAlert(null), 3000); // Hide alert after 3 seconds
+      // keep success (with password) visible longer
+      setTimeout(() => setAlert(null), 8000);
     }
   }
 

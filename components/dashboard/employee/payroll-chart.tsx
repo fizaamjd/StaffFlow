@@ -1,17 +1,25 @@
 
 "use client"
 
+import React from "react"
 import { Box, Typography } from "@mui/material"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from "recharts"
-
-const data = [
-  { name: "Week 1", regular: 800, overtime: 0 },
-  { name: "Week 2", regular: 800, overtime: 60 },
-  { name: "Week 3", regular: 760, overtime: 0 },
-  { name: "Week 4", regular: 800, overtime: 0 },
-]
+import { api } from "@/lib/api"
 
 export function EmployeePayrollChart() {
+  const [data, setData] = React.useState<any[]>([])
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res: any = await api.payrollTrend()
+        setData((res.trend || []).map((t: any) => ({ name: t.month, regular: Math.round(t.regular), overtime: Math.round(t.overtime) })))
+      } catch {
+        setData([])
+      }
+    })()
+  }, [])
+
   return (
     <Box
       sx={{

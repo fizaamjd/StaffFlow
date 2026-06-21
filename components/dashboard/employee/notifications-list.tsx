@@ -1,97 +1,50 @@
 
 "use client"
 
-import { useState } from "react"
-import { Box, Typography, Avatar, Chip, IconButton, Button } from "@mui/material"
+import { useState, useEffect } from "react"
+import { Box, Typography, Avatar, Chip, IconButton, Button, CircularProgress } from "@mui/material"
 import { CalendarToday, AccessTime, Message, Star, Delete } from "@mui/icons-material"
+import { api } from "@/lib/api"
 
-// Types
 type Notification = {
-  id: number
+  _id: string
   title: string
   message: string
-  time: string
-  date: string
   read: boolean
-  important: boolean
-  type: "shift_change" | "message" | "system" | "schedule"
-  user?: {
-    name: string
-    avatar: string
-    initials: string
-  }
+  important?: boolean
+  type: string
+  createdAt: string
 }
 
-const notifications: Notification[] = [
-  {
-    id: 1,
-    title: "Schedule Update",
-    message: "Your shift on Monday, April 20 has been confirmed.",
-    time: "10:30 AM",
-    date: "2025-04-19",
-    read: false,
-    important: true,
-    type: "schedule",
-    user: {
-      name: "John Manager",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "JM",
-    },
-  },
-  {
-    id: 2,
-    title: "New Message",
-    message: "John Manager sent you a message about your upcoming shift.",
-    time: "Yesterday",
-    date: "2025-04-18",
-    read: false,
-    important: false,
-    type: "message",
-    user: {
-      name: "John Manager",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "JM",
-    },
-  },
-  {
-    id: 3,
-    title: "Payroll Processed",
-    message: "Your payroll for the period ending April 15 has been processed.",
-    time: "2 days ago",
-    date: "2025-04-17",
-    read: true,
-    important: true,
-    type: "system",
-  },
-  {
-    id: 4,
-    title: "Shift Change",
-    message: "Your shift request for April 22 has been approved.",
-    time: "3 days ago",
-    date: "2025-04-16",
-    read: true,
-    important: false,
-    type: "shift_change",
-    user: {
-      name: "John Manager",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "JM",
-    },
-  },
-  {
-    id: 5,
-    title: "New Schedule",
-    message: "The schedule for April 20-26 has been published.",
-    time: "1 week ago",
-    date: "2025-04-12",
-    read: true,
-    important: false,
-    type: "schedule",
-  },
-]
+const relativeTime = (iso: string) => {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return "Just now"
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(iso).toLocaleDateString()
+}
 
 export function EmployeeNotificationsList({ filter = "all" }: { filter?: "all" | "unread" | "important" }) {
-  const [notificationState, setNotificationState] = useState(notifications)
+  const [notificationState, setNotificationState] = useState<Notification[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    ;(async () => {
+      setLoading(true)
+      try {
+        const res: any = await api.notifications({ limit: 50 })
+        setNotificationState(res.notifications || [])
+      } catch {
+        setNotificationState([])
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
 
   const filteredNotifications = notificationState.filter((notification) => {
     if (filter === "unread") return !notification.read
@@ -101,11 +54,12 @@ export function EmployeeNotificationsList({ filter = "all" }: { filter?: "all" |
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case "shift_change":
+      case "shift":
       case "schedule":
         return <CalendarToday sx={{ color: "#3b82f6", fontSize: 20 }} />
-      case "message":
+      case "success":
         return <Message sx={{ color: "#22c55e", fontSize: 20 }} />
+      case "payroll":
       case "system":
         return <AccessTime sx={{ color: "#f97316", fontSize: 20 }} />
       default:
@@ -113,23 +67,41 @@ export function EmployeeNotificationsList({ filter = "all" }: { filter?: "all" |
     }
   }
 
-  const toggleImportant = (id: number) => {
+  const toggleImportant = (id: string) => {
     setNotificationState(
       notificationState.map((notification) =>
-        notification.id === id ? { ...notification, important: !notification.important } : notification,
+        notification._id === id ? { ...notification, important: !notification.important } : notification,
       ),
     )
   }
 
-  const deleteNotification = (id: number) => {
-    setNotificationState(notificationState.filter((notification) => notification.id !== id))
+  const deleteNotification = async (id: string) => {
+    setNotificationState(notificationState.filter((notification) => notification._id !== id))
+    try {
+      await api.deleteNotification(id)
+    } catch {
+      /* ignore */
+    }
   }
 
-  const markAsRead = (id: number) => {
+  const markAsRead = async (id: string) => {
     setNotificationState(
       notificationState.map((notification) =>
-        notification.id === id ? { ...notification, read: true } : notification,
+        notification._id === id ? { ...notification, read: true } : notification,
       ),
+    )
+    try {
+      await api.markNotificationRead(id)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+        <CircularProgress size={28} />
+      </Box>
     )
   }
 
@@ -145,7 +117,7 @@ export function EmployeeNotificationsList({ filter = "all" }: { filter?: "all" |
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {filteredNotifications.map((notification) => (
             <Box
-              key={notification.id}
+              key={notification._id}
               sx={{
                 bgcolor: notification.read ? "white" : "#f8fafc",
                 border: "1px solid #e2e8f0",
@@ -157,29 +129,23 @@ export function EmployeeNotificationsList({ filter = "all" }: { filter?: "all" |
                 },
                 cursor: "pointer",
               }}
-              onClick={() => markAsRead(notification.id)}
+              onClick={() => markAsRead(notification._id)}
             >
               <Box sx={{ display: "flex", gap: 2 }}>
                 <Box>
-                  {notification.user ? (
-                    <Avatar sx={{ width: 40, height: 40 }}>
-                      {notification.user.initials}
-                    </Avatar>
-                  ) : (
-                    <Box
-                      sx={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: "50%",
-                        bgcolor: "#f1f5f9",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {getNotificationIcon(notification.type)}
-                    </Box>
-                  )}
+                  <Box
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: "50%",
+                      bgcolor: "#f1f5f9",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {getNotificationIcon(notification.type)}
+                  </Box>
                 </Box>
                 <Box sx={{ flex: 1 }}>
                   <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
@@ -211,7 +177,7 @@ export function EmployeeNotificationsList({ filter = "all" }: { filter?: "all" |
                       <IconButton
                         onClick={(e) => {
                           e.stopPropagation()
-                          toggleImportant(notification.id)
+                          toggleImportant(notification._id)
                         }}
                         sx={{
                           color: notification.important ? "#f59e0b" : "#737373",
@@ -223,7 +189,7 @@ export function EmployeeNotificationsList({ filter = "all" }: { filter?: "all" |
                       <IconButton
                         onClick={(e) => {
                           e.stopPropagation()
-                          deleteNotification(notification.id)
+                          deleteNotification(notification._id)
                         }}
                         sx={{
                           color: "#737373",
@@ -253,7 +219,7 @@ export function EmployeeNotificationsList({ filter = "all" }: { filter?: "all" |
                         color: "#737373",
                       }}
                     >
-                      {notification.time}
+                      {relativeTime(notification.createdAt)}
                     </Typography>
                     {notification.type === "message" && (
                       <Button

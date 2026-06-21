@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import {
   Box,
   Typography,
@@ -16,15 +16,39 @@ import NotificationsIcon from "@mui/icons-material/Notifications"
 
 import { EmployeeSchedule } from "@/components/dashboard/employee/employee-schedule"
 import { EmployeeStats } from "@/components/dashboard/employee/employee-stats"
+import { api } from "@/lib/api"
+import { useRequireAuth } from "@/lib/auth"
 
 export default function EmployeeDashboardPageMUI() {
   const [tabIndex, setTabIndex] = useState(0)
+  useRequireAuth("employee")
+
+  const [s, setS] = useState({ upcomingShifts: 0, hoursThisWeek: 0, totalEarnings: 0, notifications: 0 })
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const [dash, notif]: any = await Promise.all([
+          api.employeeDashboard(),
+          api.notifications({ unread: true }),
+        ])
+        setS({
+          upcomingShifts: dash.stats?.upcomingShifts ?? 0,
+          hoursThisWeek: dash.stats?.hoursThisWeek ?? 0,
+          totalEarnings: dash.stats?.totalEarnings ?? 0,
+          notifications: notif.unreadCount ?? 0,
+        })
+      } catch {
+        /* keep zeros */
+      }
+    })()
+  }, [])
 
   const stats = [
-    { label: "Upcoming Shifts", value: 5, sub: "Next 7 days", icon: <CalendarMonthIcon color="primary" /> },
-    { label: "Hours Worked", value: 32, sub: "This week", icon: <AccessTimeIcon color="primary" /> },
-    { label: "Earnings", value: "$640", sub: "This week", icon: <CreditCardIcon color="primary" /> },
-    { label: "Notifications", value: 3, sub: "Unread messages", icon: <NotificationsIcon color="primary" /> },
+    { label: "Upcoming Shifts", value: s.upcomingShifts, sub: "Next 7 days", icon: <CalendarMonthIcon color="primary" /> },
+    { label: "Hours Worked", value: s.hoursThisWeek, sub: "This week", icon: <AccessTimeIcon color="primary" /> },
+    { label: "Earnings", value: `$${s.totalEarnings.toLocaleString()}`, sub: "Lifetime", icon: <CreditCardIcon color="primary" /> },
+    { label: "Notifications", value: s.notifications, sub: "Unread messages", icon: <NotificationsIcon color="primary" /> },
   ]
 
   return (

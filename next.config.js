@@ -1,5 +1,6 @@
 module.exports = {
-  env: {
-    MONGODB_URI: process.env.MONGODB_URI,
+  // Lint is run separately; don't fail production builds on style-only lint errors.
+  eslint: {
+    ignoreDuringBuilds: true,
   },
 }

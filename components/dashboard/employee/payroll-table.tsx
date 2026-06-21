@@ -1,49 +1,35 @@
 
 "use client"
 
+import { useState, useEffect } from "react"
 import { Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Button } from "@mui/material"
 import { FileDownload } from "@mui/icons-material"
-
-const payrollData = [
-  {
-    id: 1,
-    week: "Week 1 (Apr 1-7)",
-    regularHours: 40,
-    overtimeHours: 0,
-    regularPay: 800,
-    overtimePay: 0,
-    totalPay: 800,
-  },
-  {
-    id: 2,
-    week: "Week 2 (Apr 8-14)",
-    regularHours: 40,
-    overtimeHours: 2,
-    regularPay: 800,
-    overtimePay: 60,
-    totalPay: 860,
-  },
-  {
-    id: 3,
-    week: "Week 3 (Apr 15-21)",
-    regularHours: 38,
-    overtimeHours: 0,
-    regularPay: 760,
-    overtimePay: 0,
-    totalPay: 760,
-  },
-  {
-    id: 4,
-    week: "Week 4 (Apr 22-28)",
-    regularHours: 40,
-    overtimeHours: 0,
-    regularPay: 800,
-    overtimePay: 0,
-    totalPay: 800,
-  },
-]
+import { api } from "@/lib/api"
 
 export function EmployeePayrollTable() {
+  const [payrollData, setPayrollData] = useState<any[]>([])
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res: any = await api.payroll()
+        setPayrollData(
+          (res.entries || []).map((e: any, i: number) => ({
+            id: e._id || i,
+            week: e.date,
+            regularHours: Math.round(e.hours),
+            overtimeHours: Math.round(e.overtimeHours),
+            regularPay: Math.round(e.hours * e.hourlyRate),
+            overtimePay: Math.round(e.overtimeHours * e.hourlyRate * 1.5),
+            totalPay: Math.round(e.amount),
+          }))
+        )
+      } catch {
+        setPayrollData([])
+      }
+    })()
+  }, [])
+
   const totals = {
     regularHours: payrollData.reduce((sum, row) => sum + row.regularHours, 0),
     overtimeHours: payrollData.reduce((sum, row) => sum + row.overtimeHours, 0),

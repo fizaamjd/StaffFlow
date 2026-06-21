@@ -3,13 +3,7 @@
 import React from 'react';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { Box, styled } from '@mui/material';
-
-const data = [
-  { name: 'Week 1', regular: 8000, overtime: 1200 },
-  { name: 'Week 2', regular: 8200, overtime: 1000 },
-  { name: 'Week 3', regular: 8500, overtime: 1500 },
-  { name: 'Week 4', regular: 8300, overtime: 1300 },
-];
+import { api } from '@/lib/api';
 
 const ChartContainer = styled(Box)(({ theme }) => ({
   width: '100%',
@@ -23,6 +17,19 @@ const ChartContainer = styled(Box)(({ theme }) => ({
 }));
 
 export function ManagerPayrollChart() {
+  const [data, setData] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res: any = await api.payrollTrend();
+        setData((res.trend || []).map((t: any) => ({ name: t.month, regular: Math.round(t.regular), overtime: Math.round(t.overtime) })));
+      } catch {
+        setData([]);
+      }
+    })();
+  }, []);
+
   return (
     <ChartContainer>
       <ResponsiveContainer width="100%" height="100%">

@@ -3,6 +3,10 @@
 import React, { useState } from 'react';
 import { Box, Typography, TextField, Select, MenuItem, Slider, Switch, Button, Alert, styled, SelectChangeEvent } from '@mui/material';
 import { CalendarToday, HourglassEmpty, AutoAwesome } from '@mui/icons-material';
+import { api } from '@/lib/api';
+
+const fmt = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 const FormContainer = styled(Box)(({ theme }) => ({
   width: '100%',
@@ -95,7 +99,7 @@ const PreferenceBox = styled(Box)(({ theme }) => ({
   alignItems: 'center',
 }));
 
-export function AISchedulingForm() {
+export function AISchedulingForm({ onGenerated }: { onGenerated?: (result: any) => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [formData, setFormData] = useState({
@@ -122,14 +126,26 @@ export function AISchedulingForm() {
     setIsLoading(true);
 
     try {
-      console.log('AI Scheduling parameters:', formData);
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      setAlert({ type: 'success', message: 'Schedule generated successfully!' });
-    } catch (error) {
-      setAlert({ type: 'error', message: 'There was an error generating the schedule. Please try again.' });
+      const result: any = await api.generateSchedule({
+        startDate: fmt(formData.startDate),
+        endDate: fmt(formData.endDate),
+        department: formData.department || 'all',
+        prioritizeEmployeePreferences: formData.prioritizeEmployeePreferences,
+        considerSkillLevel: formData.considerSkillLevel,
+        maxConsecutiveDays: formData.maxConsecutiveDays,
+      });
+      const filled = result?.stats?.filled ?? 0;
+      const coverage = result?.stats?.coverage ?? 0;
+      setAlert({
+        type: 'success',
+        message: `Generated ${filled} shifts (${coverage}% coverage, avg match ${result?.stats?.avgMatchScore ?? 0}).`,
+      });
+      onGenerated?.(result);
+    } catch (error: any) {
+      setAlert({ type: 'error', message: error?.message || 'There was an error generating the schedule. Please try again.' });
     } finally {
       setIsLoading(false);
-      setTimeout(() => setAlert(null), 3000); // Hide alert after 3 seconds
+      setTimeout(() => setAlert(null), 5000);
     }
   };
 

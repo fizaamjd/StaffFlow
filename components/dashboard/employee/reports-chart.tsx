@@ -1,17 +1,25 @@
 
 "use client"
 
+import React from "react"
 import { Box, Typography } from "@mui/material"
 import { Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts"
-
-const data = [
-  { name: "Week 1", hours: 40, target: 40 },
-  { name: "Week 2", hours: 42, target: 40 },
-  { name: "Week 3", hours: 38, target: 40 },
-  { name: "Week 4", hours: 40, target: 40 },
-]
+import { api } from "@/lib/api"
 
 export function EmployeeReportsChart() {
+  const [data, setData] = React.useState<any[]>([])
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res: any = await api.reports()
+        setData((res.hoursByMonth || []).map((m: any) => ({ name: m.month, hours: Math.round(m.hours), target: 160 })))
+      } catch {
+        setData([])
+      }
+    })()
+  }, [])
+
   return (
     <Box
       sx={{

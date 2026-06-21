@@ -1,76 +1,31 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Box, Typography, Avatar, Chip, Button, styled } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { Box, Typography, Avatar, Chip, Button, CircularProgress, styled } from '@mui/material';
 import { Person, Message, CalendarToday, AccessTime, Star, Delete, PersonAdd, CheckCircle } from '@mui/icons-material';
+import { api } from '@/lib/api';
 
 type Notification = {
-  id: number;
+  _id: string;
   title: string;
   message: string;
-  time: string;
-  date: string;
   read: boolean;
-  important: boolean;
-  type: 'shift_request' | 'message' | 'system' | 'schedule';
-  user?: { name: string; avatar: string; initials: string };
+  important?: boolean;
+  type: string;
+  createdAt: string;
 };
 
-const notifications: Notification[] = [
-  {
-    id: 1,
-    title: 'Shift Request',
-    message: 'Jane Smith has requested a shift change for Monday, April 20.',
-    time: '10:30 AM',
-    date: '2025-04-19',
-    read: false,
-    important: true,
-    type: 'shift_request',
-    user: { name: 'Jane Smith', avatar: '/placeholder.svg?height=40&width=40', initials: 'JS' },
-  },
-  {
-    id: 2,
-    title: 'New Message',
-    message: 'Mike Johnson sent you a message about his upcoming shift.',
-    time: 'Yesterday',
-    date: '2025-04-18',
-    read: false,
-    important: false,
-    type: 'message',
-    user: { name: 'Mike Johnson', avatar: '/placeholder.svg?height=40&width=40', initials: 'MJ' },
-  },
-  {
-    id: 3,
-    title: 'Schedule Published',
-    message: 'The schedule for April 20-26 has been published.',
-    time: '2 days ago',
-    date: '2025-04-17',
-    read: true,
-    important: true,
-    type: 'schedule',
-  },
-  {
-    id: 4,
-    title: 'System Notification',
-    message: 'Your subscription will renew in 7 days.',
-    time: '3 days ago',
-    date: '2025-04-16',
-    read: true,
-    important: false,
-    type: 'system',
-  },
-  {
-    id: 5,
-    title: 'New Employee',
-    message: 'Sarah Williams has been added to your team.',
-    time: '1 week ago',
-    date: '2025-04-12',
-    read: true,
-    important: false,
-    type: 'system',
-    user: { name: 'Sarah Williams', avatar: '/placeholder.svg?height=40&width=40', initials: 'SW' },
-  },
-];
+const relativeTime = (iso: string) => {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+};
 
 const NotificationContainer = styled(Box)<{ read?: boolean }>(({ theme, read }) => ({
   marginBottom: theme.spacing(2),
@@ -151,7 +106,22 @@ const EmptyState = styled(Box)(({ theme }) => ({
 }));
 
 export function ManagerNotificationsList({ filter = 'all' }: { filter?: 'all' | 'unread' | 'important' }) {
-  const [notificationState, setNotificationState] = useState(notifications);
+  const [notificationState, setNotificationState] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const res: any = await api.notifications({ limit: 50 });
+        setNotificationState(res.notifications || []);
+      } catch {
+        setNotificationState([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   const filteredNotifications = notificationState.filter((notification) => {
     if (filter === 'unread') return !notification.read;
@@ -161,12 +131,13 @@ export function ManagerNotificationsList({ filter = 'all' }: { filter?: 'all' | 
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'shift_request':
+      case 'shift':
         return <Person sx={{ fontSize: 20, color: '#3b82f6' }} />;
-      case 'message':
-        return <Message sx={{ fontSize: 20, color: '#16a34a' }} />;
+      case 'success':
+        return <CheckCircle sx={{ fontSize: 20, color: '#16a34a' }} />;
       case 'schedule':
         return <CalendarToday sx={{ fontSize: 20, color: '#9333ea' }} />;
+      case 'payroll':
       case 'system':
         return <AccessTime sx={{ fontSize: 20, color: '#f97316' }} />;
       default:
@@ -174,25 +145,43 @@ export function ManagerNotificationsList({ filter = 'all' }: { filter?: 'all' | 
     }
   };
 
-  const toggleImportant = (id: number) => {
+  const toggleImportant = (id: string) => {
     setNotificationState(
       notificationState.map((notification) =>
-        notification.id === id ? { ...notification, important: !notification.important } : notification
+        notification._id === id ? { ...notification, important: !notification.important } : notification
       )
     );
   };
 
-  const deleteNotification = (id: number) => {
-    setNotificationState(notificationState.filter((notification) => notification.id !== id));
+  const deleteNotification = async (id: string) => {
+    setNotificationState(notificationState.filter((notification) => notification._id !== id));
+    try {
+      await api.deleteNotification(id);
+    } catch {
+      /* ignore */
+    }
   };
 
-  const markAsRead = (id: number) => {
+  const markAsRead = async (id: string) => {
     setNotificationState(
       notificationState.map((notification) =>
-        notification.id === id ? { ...notification, read: true } : notification
+        notification._id === id ? { ...notification, read: true } : notification
       )
     );
+    try {
+      await api.markNotificationRead(id);
+    } catch {
+      /* ignore */
+    }
   };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+        <CircularProgress size={28} />
+      </Box>
+    );
+  }
 
   return (
     <Box>
@@ -201,22 +190,13 @@ export function ManagerNotificationsList({ filter = 'all' }: { filter?: 'all' | 
       ) : (
         filteredNotifications.map((notification) => (
           <NotificationContainer
-            key={notification.id}
+            key={notification._id}
             read={notification.read}
-            onClick={() => markAsRead(notification.id)}
+            onClick={() => markAsRead(notification._id)}
           >
             <Box sx={{ display: 'flex', gap: 2 }}>
               <Box>
-                {notification.user ? (
-                  <Avatar sx={{ width: 40, height: 40 }}>
-                    <img src={notification.user.avatar || '/placeholder.svg'} alt={notification.user.name} />
-                    <Typography sx={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>
-                      {notification.user.initials}
-                    </Typography>
-                  </Avatar>
-                ) : (
-                  <NotificationIcon>{getNotificationIcon(notification.type)}</NotificationIcon>
-                )}
+                <NotificationIcon>{getNotificationIcon(notification.type)}</NotificationIcon>
               </Box>
               <Box sx={{ flex: 1 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
@@ -236,7 +216,7 @@ export function ManagerNotificationsList({ filter = 'all' }: { filter?: 'all' | 
                       className={notification.important ? 'important' : ''}
                       onClick={(e) => {
                         e.stopPropagation();
-                        toggleImportant(notification.id);
+                        toggleImportant(notification._id);
                       }}
                     >
                       <Star sx={{ fontSize: 16 }} />
@@ -244,7 +224,7 @@ export function ManagerNotificationsList({ filter = 'all' }: { filter?: 'all' | 
                     <ActionButton
                       onClick={(e) => {
                         e.stopPropagation();
-                        deleteNotification(notification.id);
+                        deleteNotification(notification._id);
                       }}
                     >
                       <Delete sx={{ fontSize: 16 }} />
@@ -258,7 +238,7 @@ export function ManagerNotificationsList({ filter = 'all' }: { filter?: 'all' | 
                 </Typography>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Typography sx={{ fontSize: '0.75rem', color: '#64748b', fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>
-                    {notification.time}
+                    {relativeTime(notification.createdAt)}
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     {notification.type === 'shift_request' && (

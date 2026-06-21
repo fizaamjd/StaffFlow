@@ -74,6 +74,7 @@ const StyledCard = styled(Card)(({ theme }) => ({
 
 const AISchedulingPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('generate');
+  const [result, setResult] = useState<any>(null);
 
   return (
     <PageContainer>
@@ -101,7 +102,7 @@ const AISchedulingPage: React.FC = () => {
                 subheader={<Typography variant="body2" sx={{ color: '#64748b' }}>Generate optimized shift schedules based on employee availability and business needs</Typography>}
               />
               <CardContent>
-                <AISchedulingForm />
+                <AISchedulingForm onGenerated={setResult} />
               </CardContent>
             </StyledCard>
             <StyledCard sx={{ mt: 2 }}>
@@ -110,7 +111,7 @@ const AISchedulingPage: React.FC = () => {
                 subheader={<Typography variant="body2" sx={{ color: '#64748b' }}>Review and adjust the AI-generated schedule</Typography>}
               />
               <CardContent>
-                <AISchedulingResults />
+                <AISchedulingResults data={result} onPublished={() => setResult(null)} />
               </CardContent>
             </StyledCard>
           </Box>

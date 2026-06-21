@@ -1,59 +1,57 @@
 
 "use client"
 
-import React from "react"
-import { Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Chip } from "@mui/material"
+import React, { useEffect, useState } from "react"
+import { Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Chip, CircularProgress, Button } from "@mui/material"
 import { CalendarMonth, AccessTime } from "@mui/icons-material"
-
-const shifts = [
-  {
-    id: 1,
-    date: "2025-04-20",
-    day: "Monday",
-    startTime: "09:00",
-    endTime: "17:00",
-    department: "Sales",
-    status: "confirmed",
-  },
-  {
-    id: 2,
-    date: "2025-04-21",
-    day: "Tuesday",
-    startTime: "09:00",
-    endTime: "17:00",
-    department: "Sales",
-    status: "confirmed",
-  },
-  {
-    id: 3,
-    date: "2025-04-23",
-    day: "Thursday",
-    startTime: "10:00",
-    endTime: "18:00",
-    department: "Sales",
-    status: "confirmed",
-  },
-  {
-    id: 4,
-    date: "2025-04-24",
-    day: "Friday",
-    startTime: "09:00",
-    endTime: "17:00",
-    department: "Sales",
-    status: "confirmed",
-  },
-  {
-    id: 5,
-    date: "2025-04-27",
-    day: "Monday",
-    startTime: "09:00",
-    endTime: "17:00",
-    department: "Sales",
-    status: "pending",
-  },
-]
+import { api } from "@/lib/api"
 
 export function EmployeeSchedule() {
+  const [shifts, setShifts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      const res: any = await api.listShifts({ from: today, limit: 50 })
+      setShifts(res.shifts || [])
+    } catch {
+      setShifts([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  const respond = async (id: string, action: "confirm" | "decline") => {
+    try {
+      await api.respondShift(id, action)
+      load()
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
+        <CircularProgress size={28} />
+      </Box>
+    )
+  }
+
+  if (shifts.length === 0) {
+    return (
+      <Typography sx={{ color: "#64748b", fontFamily: '"Inter", sans-serif', p: 2 }}>
+        You have no upcoming shifts.
+      </Typography>
+    )
+  }
+
   return (
     <Box sx={{ width: "100%" }}>
       <TableContainer
@@ -132,7 +130,7 @@ export function EmployeeSchedule() {
           <TableBody>
             {shifts.map((shift) => (
               <TableRow
-                key={shift.id}
+                key={shift._id}
                 sx={{
                   "&:hover": {
                     bgcolor: "#f8fafc",
@@ -192,20 +190,32 @@ export function EmployeeSchedule() {
                   </Typography>
                 </TableCell>
                 <TableCell>
-                  <Chip
-                    label={shift.status === "confirmed" ? "Confirmed" : "Pending"}
-                    color={shift.status === "confirmed" ? "primary" : "default"}
-                    sx={{
-                      fontFamily: '"Inter", sans-serif',
-                      fontWeight: 500,
-                      fontSize: "0.75rem",
-                      bgcolor: shift.status === "confirmed" ? "#03306b" : "transparent",
-                      color: shift.status === "confirmed" ? "white" : "#03306b",
-                      borderColor: shift.status === "confirmed" ? "#03306b" : "#03306b",
-                      borderWidth: shift.status === "confirmed" ? 0 : 1,
-                      borderStyle: shift.status === "confirmed" ? "none" : "solid",
-                    }}
-                  />
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Chip
+                      label={shift.status.charAt(0).toUpperCase() + shift.status.slice(1)}
+                      color={shift.status === "confirmed" ? "primary" : "default"}
+                      sx={{
+                        fontFamily: '"Inter", sans-serif',
+                        fontWeight: 500,
+                        fontSize: "0.75rem",
+                        bgcolor: shift.status === "confirmed" ? "#03306b" : "transparent",
+                        color: shift.status === "confirmed" ? "white" : "#03306b",
+                        borderColor: "#03306b",
+                        borderWidth: shift.status === "confirmed" ? 0 : 1,
+                        borderStyle: shift.status === "confirmed" ? "none" : "solid",
+                      }}
+                    />
+                    {shift.status === "pending" && (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => respond(shift._id, "confirm")}
+                        sx={{ textTransform: "none", bgcolor: "#16a34a", "&:hover": { bgcolor: "#15803d" }, fontSize: "0.7rem", py: 0.25 }}
+                      >
+                        Confirm
+                      </Button>
+                    )}
+                  </Box>
                 </TableCell>
               </TableRow>
             ))}

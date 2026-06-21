@@ -10,6 +10,7 @@ import {
 import {
   Notifications, ArrowDropDown, Assignment, CreditCard, Home, Logout, Settings, AutoAwesome, Person, People
 } from '@mui/icons-material';
+import { useAuth } from '@/lib/auth';
 
 const AppContainer = styled(Box)({
   display: 'flex',
@@ -248,6 +249,7 @@ const StyledMenu = styled(Menu)(({ theme }) => ({
 export function ManagerSidebar({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { user, logout } = useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -270,7 +272,7 @@ export function ManagerSidebar({ children }: { children: React.ReactNode }) {
   };
 
   const handleSignOut = () => {
-    router.push('/');
+    logout();
   };
 
   const handleDropdownOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -351,10 +353,10 @@ export function ManagerSidebar({ children }: { children: React.ReactNode }) {
         </SidebarContent>
         <SidebarFooter>
           <DropdownButton onClick={handleDropdownOpen}>
-            <StyledAvatar>M</StyledAvatar>
+            <StyledAvatar>{(user?.name || 'M').charAt(0).toUpperCase()}</StyledAvatar>
             <UserInfo>
-              <UserName>John Manager</UserName>
-              <UserEmail>manager@staffflow.com</UserEmail>
+              <UserName>{user?.name || 'Manager'}</UserName>
+              <UserEmail>{user?.email || ''}</UserEmail>
             </UserInfo>
             <ArrowDropDown sx={{ fontSize: 16, ml: 'auto' }} />
           </DropdownButton>

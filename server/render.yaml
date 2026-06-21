@@ -1,0 +1,25 @@
+# Render Blueprint for the StaffFlow API.
+# In Render: New + → Blueprint → point at this repo. Render reads this file.
+# (rootDir is set so Render builds/runs from the /server folder.)
+services:
+  - type: web
+    name: staffflow-api
+    runtime: node
+    rootDir: server
+    plan: free
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: JWT_SECRET
+        generateValue: true # Render generates a strong secret automatically
+      - key: MONGODB_URI
+        sync: false # set this in the Render dashboard (do NOT commit it)
+      - key: CLIENT_ORIGINS
+        sync: false # set to your Vercel URL, e.g. https://staffflow.vercel.app

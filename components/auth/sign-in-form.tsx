@@ -5,29 +5,31 @@ import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Box, Button, Checkbox, TextField, Typography, IconButton, Divider, FormControlLabel } from "@mui/material"
+import { Box, Button, Checkbox, TextField, Typography, IconButton, Divider, FormControlLabel, Alert } from "@mui/material"
 import { Visibility, VisibilityOff, Lock, Mail } from "@mui/icons-material"
+import { useAuth } from "@/lib/auth"
 
 export function SignInForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const { login } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setError(null)
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const user = await login(email, password)
+      router.push(user.role === "manager" ? "/dashboard/manager" : "/dashboard/employee")
+    } catch (err: any) {
+      setError(err?.message || "Sign in failed. Please try again.")
       setLoading(false)
-      if (email.includes("manager")) {
-        router.push("/dashboard/manager")
-      } else {
-        router.push("/dashboard/employee")
-      }
-    }, 1000)
+    }
   }
 
   return (
@@ -64,6 +66,12 @@ export function SignInForm() {
           Sign in to your StaffFlow account
         </Typography>
       </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
 
       <form onSubmit={handleSubmit}>
         <Box sx={{ mb: 3 }}>

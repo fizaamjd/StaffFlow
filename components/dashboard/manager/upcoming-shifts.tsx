@@ -1,76 +1,18 @@
 'use client';
 
-import React from 'react';
-import { Box, Typography, Avatar, Chip, Button, styled } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { Box, Typography, Avatar, Chip, Button, CircularProgress, styled } from '@mui/material';
 import { CalendarToday, AccessTime, Edit, Delete } from '@mui/icons-material';
+import { api } from '@/lib/api';
 
-const shifts = [
-  {
-    id: 1,
-    employee: {
-      name: 'Jane Smith',
-      avatar: '/placeholder.svg?height=40&width=40',
-      initials: 'JS',
-    },
-    department: 'Sales',
-    date: '2025-04-20',
-    startTime: '09:00',
-    endTime: '17:00',
-    status: 'confirmed',
-  },
-  {
-    id: 2,
-    employee: {
-      name: 'Mike Johnson',
-      avatar: '/placeholder.svg?height=40&width=40',
-      initials: 'MJ',
-    },
-    department: 'Support',
-    date: '2025-04-20',
-    startTime: '10:00',
-    endTime: '18:00',
-    status: 'confirmed',
-  },
-  {
-    id: 3,
-    employee: {
-      name: 'Sarah Williams',
-      avatar: '/placeholder.svg?height=40&width=40',
-      initials: 'SW',
-    },
-    department: 'Kitchen',
-    date: '2025-04-21',
-    startTime: '08:00',
-    endTime: '16:00',
-    status: 'pending',
-  },
-  {
-    id: 4,
-    employee: {
-      name: 'David Brown',
-      avatar: '/placeholder.svg?height=40&width=40',
-      initials: 'DB',
-    },
-    department: 'Delivery',
-    date: '2025-04-21',
-    startTime: '12:00',
-    endTime: '20:00',
-    status: 'confirmed',
-  },
-  {
-    id: 5,
-    employee: {
-      name: 'Lisa Chen',
-      avatar: '/placeholder.svg?height=40&width=40',
-      initials: 'LC',
-    },
-    department: 'Admin',
-    date: '2025-04-22',
-    startTime: '09:00',
-    endTime: '17:00',
-    status: 'confirmed',
-  },
-];
+const initials = (name: string) =>
+  (name || '')
+    .split(' ')
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
 const ShiftsContainer = styled(Box)(({ theme }) => ({
   width: '100%',
@@ -159,6 +101,53 @@ const ActionButton = styled(Button)(({ theme }) => ({
 }));
 
 export function UpcomingShifts() {
+  const [shifts, setShifts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const today = new Date();
+      const from = today.toISOString().slice(0, 10);
+      const to = new Date(today.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+      const res: any = await api.listShifts({ from, to, limit: 10 });
+      setShifts(res.shifts || []);
+    } catch {
+      setShifts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api.deleteShift(id);
+      setShifts((prev) => prev.filter((s) => s._id !== id));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+        <CircularProgress size={28} />
+      </Box>
+    );
+  }
+
+  if (shifts.length === 0) {
+    return (
+      <Typography sx={{ color: '#64748b', p: 2, fontFamily: '"Inter", sans-serif' }}>
+        No upcoming shifts in the next 7 days.
+      </Typography>
+    );
+  }
+
   return (
     <ShiftsContainer>
       <ShiftsTable>
@@ -172,15 +161,16 @@ export function UpcomingShifts() {
             <Box sx={{ flex: 1, textAlign: 'right' }}>Actions</Box>
           </Box>
         </TableHeader>
-        {shifts.map((shift) => (
-          <TableRow key={shift.id}>
+        {shifts.map((shift) => {
+          const empName = shift.employee?.name || 'Unassigned';
+          return (
+          <TableRow key={shift._id}>
             <EmployeeCell>
               <Avatar sx={{ width: 32, height: 32, bgcolor: '#03306b', color: 'white', fontSize: '0.75rem', fontWeight: 600 }}>
-                <img src={shift.employee.avatar || '/placeholder.svg'} alt={shift.employee.name} />
-                {shift.employee.initials}
+                {initials(empName)}
               </Avatar>
               <Typography sx={{ fontWeight: 500, color: '#03306b', fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", "Arial", sans-serif' }}>
-                {shift.employee.name}
+                {empName}
               </Typography>
             </EmployeeCell>
             <Box sx={{ flex: 1 }}>
@@ -201,18 +191,16 @@ export function UpcomingShifts() {
               </Typography>
             </TimeCell>
             <Box sx={{ flex: 1 }}>
-              <StatusBadge status={shift.status} label={shift.status === 'confirmed' ? 'Confirmed' : 'Pending'} />
+              <StatusBadge status={shift.status} label={shift.status === 'confirmed' ? 'Confirmed' : shift.status.charAt(0).toUpperCase() + shift.status.slice(1)} />
             </Box>
             <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-              <ActionButton>
-                <Edit sx={{ fontSize: 16, color: '#03306b' }} />
-              </ActionButton>
-              <ActionButton>
+              <ActionButton onClick={() => handleDelete(shift._id)}>
                 <Delete sx={{ fontSize: 16, color: '#c61111' }} />
               </ActionButton>
             </Box>
           </TableRow>
-        ))}
+          );
+        })}
       </ShiftsTable>
     </ShiftsContainer>
   );

@@ -3,8 +3,9 @@
 import React from 'react';
 import { Box, Button, Typography, styled } from '@mui/material';
 import { Download } from '@mui/icons-material';
+import { api } from '@/lib/api';
 
-const payrollData = [
+const _legacyPayrollData = [
   {
     id: 1,
     department: 'Sales',
@@ -117,6 +118,30 @@ const StyledOutlineButton = styled(Button)(({ theme }) => ({
 }));
 
 export function ManagerPayrollTable() {
+  const [payrollData, setPayrollData] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const res: any = await api.payroll();
+        setPayrollData(
+          (res.departments || []).map((d: any, i: number) => ({
+            id: i,
+            department: d.department,
+            employees: d.employeeCount,
+            regularHours: Math.round(d.hours),
+            overtimeHours: Math.round(d.overtimeHours),
+            regularPay: Math.round(d.regularPay),
+            overtimePay: Math.round(d.overtimePay),
+            totalPay: Math.round(d.amount),
+          }))
+        );
+      } catch {
+        setPayrollData([]);
+      }
+    })();
+  }, []);
+
   return (
     <Container>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
