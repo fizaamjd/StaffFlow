@@ -23,6 +23,14 @@ const ALL_DEPARTMENTS = User.DEPARTMENTS;
 exports.generate = asyncHandler(async (req, res) => {
   const params = generateSchema.parse(req.body);
 
+  // Normalize department casing: the UI may send "sales" but data is stored as "Sales".
+  if (params.department && params.department !== 'all') {
+    const canonical = ALL_DEPARTMENTS.find(
+      (d) => d.toLowerCase() === params.department.toLowerCase()
+    );
+    params.department = canonical || params.department;
+  }
+
   const departments =
     params.department && params.department !== 'all' ? [params.department] : ALL_DEPARTMENTS;
 
@@ -122,6 +130,12 @@ exports.recommend = asyncHandler(async (req, res) => {
     limit: z.coerce.number().int().min(1).max(20).optional().default(5),
   });
   const q = schema.parse(req.query);
+
+  // Normalize department casing to match stored values.
+  if (q.department) {
+    const canonical = ALL_DEPARTMENTS.find((d) => d.toLowerCase() === q.department.toLowerCase());
+    q.department = canonical || q.department;
+  }
 
   const filter = { role: 'employee', status: 'active' };
   const employees = await User.find(filter).lean();

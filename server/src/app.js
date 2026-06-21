@@ -33,7 +33,17 @@ app.use(cookieParser());
 const corsOptions = {
   origin(origin, callback) {
     // allow non-browser clients (curl, server-to-server) with no origin
-    if (!origin || env.clientOrigins.includes(origin)) return callback(null, true);
+    if (!origin) return callback(null, true);
+    // explicit allow-list, or "*" to allow everything
+    if (env.clientOrigins.includes('*') || env.clientOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    // allow any Vercel deployment (preview URLs change every deploy)
+    try {
+      if (new URL(origin).hostname.endsWith('.vercel.app')) return callback(null, true);
+    } catch {
+      /* fall through */
+    }
     return callback(new Error(`Origin ${origin} not allowed by CORS`));
   },
   credentials: true,
