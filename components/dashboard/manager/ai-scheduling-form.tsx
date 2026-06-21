@@ -8,6 +8,9 @@ import { api } from '@/lib/api';
 const fmt = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+// UI uses lowercase department values ("sales"); the API/data use "Sales".
+const capDept = (d: string) => (d && d !== 'all' ? d.charAt(0).toUpperCase() + d.slice(1) : d);
+
 const FormContainer = styled(Box)(({ theme }) => ({
   width: '100%',
   display: 'flex',
@@ -129,7 +132,7 @@ export function AISchedulingForm({ onGenerated }: { onGenerated?: (result: any) 
       const result: any = await api.generateSchedule({
         startDate: fmt(formData.startDate),
         endDate: fmt(formData.endDate),
-        department: formData.department || 'all',
+        department: capDept(formData.department || 'all'),
         prioritizeEmployeePreferences: formData.prioritizeEmployeePreferences,
         considerSkillLevel: formData.considerSkillLevel,
         maxConsecutiveDays: formData.maxConsecutiveDays,
