@@ -1,0 +1,18 @@
+from pathlib import Path
+import re
+from urllib.parse import unquote
+root = Path(__file__).resolve().parents[1]
+files = [root / x for x in ["README.md", "CONTRIBUTING.md", "SECURITY.md", "SUPPORT.md"]] + list((root / "docs").glob("*.md"))
+missing = []
+for file in files:
+    if "DEMO_PLACEHOLDER" in file.read_text():
+        raise SystemExit(f"Unresolved demo link: {file}")
+    for target in re.findall(r"(?<!!)\[[^\]]*\]\(([^)]+)\)", file.read_text()):
+        if target.startswith(("https://", "http://", "#", "mailto:")):
+            continue
+        target = unquote(target.split("#")[0].strip("<>"))
+        if target and not (file.parent / target).exists():
+            missing.append(f"{file.relative_to(root)} -> {target}")
+if missing:
+    raise SystemExit("Missing documentation links:\n" + "\n".join(missing))
+print(f"Documentation links: {len(files)} files checked")

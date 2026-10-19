@@ -38,3 +38,20 @@ frontend.env.txt
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# Local configuration and generated maintenance artifacts
+.env
+.env.*
+!.env.example
+!.env.local.example
+node_modules/
+.next/
+dist/
+out/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.tsbuildinfo
+.impeccable/
+.claude/
+.DS_Store
